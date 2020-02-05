@@ -58,6 +58,11 @@ class Projective2d:
         self._reproc()
 
     def __rmul__(self, scalar):
+        """Scales the vector by `scalar`.
+        >>> p = Projective2d(1, 0)
+        >>> 3 * p
+        Projective2d(3, 0.0)
+        """
         return Projective2d(self._r * scalar, self._theta)
     def __imul__(self, scalar):
         self.r *= scalar
