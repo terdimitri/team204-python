@@ -1,11 +1,22 @@
-from vectors import Projective2d, Matrix2d
-from math import tau, copysign, pi, cos, inf
+from math import tau, copysign, pi, cos, inf, sqrt
 import wpilib
 import ctre
 
+from vectors import Projective2d
+
+
+def closest_to_mod(a, c, n):
+    """Return b congruent to a modulo n such that abs(b-c) is minimized.
+    """
+    delta = (a - c) % n
+    if n - delta < delta:
+        delta -= n
+    return c + delta
+
 
 class SwerveModule:
-    def __init__(self, drive_motor, turning_motor, encoder, full_turn, inverted=None):
+    full_turn = 415
+    def __init__(self, drive_motor, turning_motor, encoder, inverted=None):
         """At the start of program, it is expected that the drive motor will
         spin forwards, the turning motor will spin counter-clockwise, and the
         encoder will increase, given positive voltage. If they do not, set the
@@ -14,27 +25,26 @@ class SwerveModule:
         self.inverted = inverted
         if inverted is None:
             self.inverted = {
-                    'encoder': False,
-                    'turning_motor': False,
-                    'drive_motor': False,
-                }
+                'encoder': False,
+                'turning_motor': False,
+                'drive_motor': False,
+            }
         self.drive_motor = drive_motor
-        self.turning_motor = self.turning_motor
-        self.encoder = self.encoder
-        self.full_turn = full_turn
+        self.turning_motor = turning_motor
+        self.encoder = encoder
 
-    def set_turn(speed):
+    def set_turn(self, speed):
         """Sets the turning motor.
         """
-        if inverted['turning_motor']:
+        if self.inverted['turning_motor']:
             self.turning_motor.set(-speed)
         else:
             self.turning_motor.set(speed)
 
-    def set_drive(speed):
+    def set_drive(self, speed):
         """Sets the driving motor.
         """
-        if inverted['drive_motor']:
+        if self.inverted['drive_motor']:
             self.drive_motor.set(-speed)
         else:
             self.drive_motor.set(speed)
@@ -43,38 +53,47 @@ class SwerveModule:
         """Returns the current angle of the wheel based on the current encoder
         value.
         """
-        if inverted['encoder']:
-            return -self.encoder.encoder.get() / full_turn * tau
-        else:
-            return self.encoder.encoder.get() / full_turn * tau
+        if self.inverted['encoder']:
+            return -self.encoder.encoder.get() / self.full_turn * tau
+        return self.encoder.encoder.get() / self.full_turn * tau
 
-    def set(vector, speed=1, p_coeff=0.02):
+    def angle_error(self, vector):
+        """Returns distance between current angle and argument of the vector.
+        """
+        current_angle = self.current_angle()
+        return abs(closest_to_mod(vector.argument, current_angle, pi) - current_angle)
+
+    def set(self, vector, speed=1, p_coeff=0.5):
         """Sets the speed of the driving motor to the magnitude of the vector
         scaled by `speed`, and sets the turning motor to turn towards the
         desired angle.
         """
-        # TODO: reverse wheel direction when appropriate
         if vector is None:
-            stop()
+            self.stopMotor()
         # proportional control for turning to specified angle
         current_angle = self.current_angle()
-        target_angle = closest_to_mod(current_angle, self.full_turn//2)
+        target_angle = closest_to_mod(vector.argument, current_angle, pi)
         angle_delta = target_angle - current_angle
         turning_speed = -copysign(min(1, abs(p_coeff*angle_delta)), angle_delta)
         self.set_turn(turning_speed)
+        # if target_angle is the argument backwards, reverse the speed
+        reverse = 1
+        if abs((vector.argument - target_angle) % tau - pi) < pi/2:
+            reverse = -1
         # set speed of drive motor
         speed = speed * min(1, vector.magnitude)
-        self.set_drive(speed)
+        self.set_drive(reverse*speed)
 
-    def stopMotor():
+    def stopMotor(self):
         """Stops both motors.
         """
-        set_turn(0)
-        set_drive(0)
+        self.set_turn(0)
+        self.set_drive(0)
 
 
 
 class SwerveDrive(wpilib.drive.RobotDriveBase):
+    angle_tolerance = tau/20
     def __init__(self, front_left, front_right, back_right, back_left, wheelbase, trackwidth):
         super().__init__()
         self.front_left = front_left
@@ -84,25 +103,36 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
         self.wheelbase = wheelbase
         self.trackwidth = trackwidth
 
-    def set(forward, strafe_left, rotate):
+    def set(self, forward, strafe_left, rotate):
         forward = self.applyDeadband(forward)
         strafe_left = self.applyDeadband(strafe_left)
         rotate = self.applyDeadband(rotate)
 
-        c = Projective2d(forwards, strafe_left)
+        center = Projective2d(forward, strafe_left)
         # translation_intensity is the ratio of the magnitude of the joystick
         # position to the magnitude of the furthest possible joystick position
         # with the same argument
-        translation_intensity = c.magnitude * cos((c.argument+pi4) % pi/2 + pi/4)
-        c.argument += pi/2
+        translation_intensity = center.magnitude * cos((center.argument+pi/4) % pi/2 + pi/4)
+        center.magnitude = translation_intensity
+        center.argument += pi/2
 
         try:
             scalar = 1/rotate
         except ZeroDivisionError:
             scalar = inf
+        center *= scalar
 
-        c *= scalar
-        self.cc_around()
+        # max_possible_rotate is the maximum rotate input that would be able to
+        # result in the same center
+        max_possible_rotate = 1 / center.magnitude
+        max_possible_rotate = min(1, max_possible_rotate)
+
+        try:
+            speed = rotate / max_possible_rotate
+        except ZeroDivisionError:
+            speed = translation_intensity
+
+        self.cc_around(speed, center)
 
     def cc_around(self, speed, c):
         """Makes the robot turn counter clockwise around `c`, which is in
@@ -124,27 +154,46 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
         back_left_vec.argument += pi/2
 
         max_magnitude = max(front_left_vec.magnitude,
-                             front_right_vec.magnitude,
-                             back_right_vec.magnitude,
-                             back_left_vec.magnitude)
-        front_left_vec *= (1/max_magnitude)
-        front_right_vec *= (1/max_magnitude)
-        back_right_vec *= (1/max_magnitude)
-        back_left_vec *= (1/max_magnitude)
+                            front_right_vec.magnitude,
+                            back_right_vec.magnitude,
+                            back_left_vec.magnitude)
+        try:
+            front_left_vec *= (1/max_magnitude)
+            front_right_vec *= (1/max_magnitude)
+            back_right_vec *= (1/max_magnitude)
+            back_left_vec *= (1/max_magnitude)
+        except ZeroDivisionError:
+            front_left_vec.magnitude = 1
+            front_right_vec.magnitude = 1
+            back_right_vec.magnitude = 1
+            back_left_vec.magnitude = 1
 
-        front_left.set(front_left_vec, speed)
-        front_right.set(front_right_vec, speed)
-        back_right.set(back_right_vec, speed)
-        back_left.set(back_left_vec, speed)
+        max_angle_error = max(self.front_left.angle_error(front_left_vec),
+                              self.front_right.angle_error(front_right_vec),
+                              self.back_right.angle_error(back_right_vec),
+                              self.back_left.angle_error(back_left_vec))
+
+        if max_angle_error <= self.angle_tolerance:
+            self.front_left.set(front_left_vec, 0)
+            self.front_right.set(front_right_vec, 0)
+            self.back_right.set(back_right_vec, 0)
+            self.back_left.set(back_left_vec, 0)
+        else:
+            self.front_left.set(front_left_vec, speed)
+            self.front_right.set(front_right_vec, speed)
+            self.back_right.set(back_right_vec, speed)
+            self.back_left.set(back_left_vec, speed)
 
         # Tell the watchdog that the motors have been set.
         self.feed()
 
-    def stopMotor():
-        front_left.stopMotor()
-        front_right.stopMotor()
-        back_right.stopMotor()
-        back_left.stopMotor()
+    def stopMotor(self):
+        """Stops all motors.
+        """
+        self.front_left.stopMotor()
+        self.front_right.stopMotor()
+        self.back_right.stopMotor()
+        self.back_left.stopMotor()
 
         # Tell the watchdog that the motors have been set.
         self.feed()
@@ -154,20 +203,20 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
 class OurRobot(wpilib.TimedRobot):
     def robotInit(self):
         self.motors = [
-                ctre.WPI_TalonSRX(11),
-                ctre.WPI_TalonSRX(12),
-                ctre.WPI_TalonSRX(13),
-                ctre.WPI_TalonSRX(14),
-                ctre.WPI_TalonSRX(21),
-                ctre.WPI_TalonSRX(22),
-                ctre.WPI_TalonSRX(23),
-                ctre.WPI_TalonSRX(24)
+            ctre.WPI_TalonSRX(11),
+            ctre.WPI_TalonSRX(12),
+            ctre.WPI_TalonSRX(13),
+            ctre.WPI_TalonSRX(14),
+            ctre.WPI_TalonSRX(21),
+            ctre.WPI_TalonSRX(22),
+            ctre.WPI_TalonSRX(23),
+            ctre.WPI_TalonSRX(24)
             ]
         self.encoders = [
-                wpilib.Encoder(0, 1),
-                wpilib.Encoder(2, 3),
-                wpilib.Encoder(4, 5),
-                wpilib.Encoder(6, 7)
+            wpilib.Encoder(0, 1),
+            wpilib.Encoder(2, 3),
+            wpilib.Encoder(4, 5),
+            wpilib.Encoder(6, 7)
             ]
 
     def teleopPeriodic(self):
