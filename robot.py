@@ -198,6 +198,9 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
         # Tell the watchdog that the motors have been set.
         self.feed()
 
+    def getDescription(self) -> str:
+        return "SwerveDrive"
+
 
 
 class OurRobot(wpilib.TimedRobot):

@@ -1,7 +1,11 @@
-from math import sqrt, sin, cos, atan2, pi, tau, inf, isfinite, nan
+"""Class for vectors in the projective plane.
+"""
+from math import sqrt, sin, cos, atan2, tau
 
 
 class Projective2d:
+    """A two dimensional vector on the projective plane
+    """
     def __init__(self, r, theta, cartesian=False):
         if cartesian:
             self._r, self._theta = 0, 0
@@ -21,17 +25,25 @@ class Projective2d:
 
     @property
     def magnitude(self):
+        """Returns magnitude of the vector
+        """
         return self._r
     @magnitude.setter
     def magnitude(self, r):
+        """Sets magnitude of the vector
+        """
         self._r = r
         self._reproc()
 
     @property
     def argument(self):
+        """Returns argument of the vector
+        """
         return self._theta
     @argument.setter
     def argument(self, theta):
+        """Sets argument of the vector
+        """
         self._theta = theta
         self._reproc()
 
@@ -41,6 +53,8 @@ class Projective2d:
         return self._r * cos(self._theta)
     @x.setter
     def x(self, new_x):
+        """Sets x component of the vector
+        """
         old_y = self.y
         self._theta = atan2(old_y, new_x)
         self._r = sqrt(new_x**2 + old_y**2)
@@ -52,6 +66,8 @@ class Projective2d:
         return self._r * sin(self._theta)
     @y.setter
     def y(self, new_y):
+        """Sets y component of the vector
+        """
         old_x = self.x
         self._theta = atan2(new_y, old_x)
         self._r = sqrt(old_x**2 + new_y**2)
@@ -65,7 +81,7 @@ class Projective2d:
         """
         return Projective2d(self._r * scalar, self._theta)
     def __imul__(self, scalar):
-        self.r *= scalar
+        self._r *= scalar
         self._reproc()
 
     def __add__(self, other):
@@ -86,16 +102,3 @@ class Projective2d:
 
     def __repr__(self):
         return f'Projective2d({self._r}, {self._theta})'
-
-
-class Matrix2d:
-    def __init__(self, left_vector, right_vector):
-        self.left_vector = left_vector
-        self.right_vector = right_vector
-
-    def __matmul__(self, other):
-        if (isinstance(other, Matrix2d)):
-            return  Matrix2d(self@other.left_vector, self@other.right_vector)
-        else:
-            return other.x * self.left_vector + other.y * self.right_vector
-
