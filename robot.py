@@ -260,10 +260,11 @@ class OurRobot(wpilib.TimedRobot):
         pass
     def teleopPeriodic(self):
         if self.diag:
-            for drive_motor in self.drive_motors.values():
-                drive_motor.set(0.1)
-            for turning_motor in self.turning_motors.values():
-                turning_motor.set(0.1)
+            if self.controller.getAButton():
+                for drive_motor in self.drive_motors.values():
+                    drive_motor.set(0.1)
+                for turning_motor in self.turning_motors.values():
+                    turning_motor.set(0.1)
             for i, encoder in enumerate(self.encoders.values()):
                 wpilib.SmartDashboard.putString(f'encoder_{i}', str(encoder.get()))
 
