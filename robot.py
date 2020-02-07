@@ -204,23 +204,72 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
 
 
 class OurRobot(wpilib.TimedRobot):
-    def robotInit(self):
-        self.motors = [
-            ctre.WPI_TalonSRX(11),
-            ctre.WPI_TalonSRX(12),
-            ctre.WPI_TalonSRX(13),
-            ctre.WPI_TalonSRX(14),
-            ctre.WPI_TalonSRX(21),
-            ctre.WPI_TalonSRX(22),
-            ctre.WPI_TalonSRX(23),
-            ctre.WPI_TalonSRX(24)
-            ]
-        self.encoders = [
-            wpilib.Encoder(0, 1),
-            wpilib.Encoder(2, 3),
-            wpilib.Encoder(4, 5),
-            wpilib.Encoder(6, 7)
-            ]
+    def __init__(self):
+        super().__init__()
 
+        self.drive_motors = {
+            'front left':  ctre.WPI_TalonSRX(11),
+            'front right': ctre.WPI_TalonSRX(12),
+            'back right':  ctre.WPI_TalonSRX(13),
+            'back left':   ctre.WPI_TalonSRX(14),
+            }
+        self.turning_motors = {
+            'front left':  ctre.WPI_TalonSRX(21),
+            'front right': ctre.WPI_TalonSRX(22),
+            'back right':  ctre.WPI_TalonSRX(23),
+            'back left':   ctre.WPI_TalonSRX(24),
+            }
+        self.encoders = {
+            'front left':  wpilib.Encoder(0, 1),
+            'front right': wpilib.Encoder(2, 3),
+            'back right':  wpilib.Encoder(4, 5),
+            'back left':   wpilib.Encoder(6, 7)
+            }
+
+        # 0 is the left hand, 1 is the right hand
+        self.controller = wpilib.XboxController(0)
+
+        self.drive = SwerveDrive(
+            SwerveModule(self.drive_motors['front left'],
+                         self.turning_motors['front left'],
+                         self.encoders['front left']),
+            SwerveModule(self.drive_motors['front right'],
+                         self.turning_motors['front right'],
+                         self.encoders['front right']),
+            SwerveModule(self.drive_motors['back right'],
+                         self.turning_motors['back right'],
+                         self.encoders['back right']),
+            SwerveModule(self.drive_motors['back left'],
+                         self.turning_motors['back left'],
+                         self.encoders['back left']),
+            20, 25.5
+        )
+
+    def robotInit(self):
+        self.logger.info("Hello world!")
+    def robotPeriodic(self):
+        pass
+
+    def autonomousInit(self):
+        pass
+    def autonomousPeriodic(self):
+        pass
+
+    def teleopInit(self):
+        pass
     def teleopPeriodic(self):
+        forward = -self.controller.getY(0)
+        left = -self.controller.getX(0)
+        rotate_cc = -self.controler.getX(1)
+
+        self.drive.set(forward, left, rotate_cc)
+
+    def testInit(self):
+        pass
+    def testPeriodic(self):
+        pass
+
+    def disabledInit(self):
+        pass
+    def disabledPeriodic(self):
         pass
