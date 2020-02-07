@@ -1,5 +1,6 @@
 from math import tau, copysign, pi, cos, inf, sqrt
 import wpilib
+import wpilib.drive
 import ctre
 
 from vectors import Projective2d
@@ -209,22 +210,22 @@ class OurRobot(wpilib.TimedRobot):
         super().__init__()
 
         self.drive_motors = {
-            'front left':  ctre.WPI_TalonSRX(11),
-            'front right': ctre.WPI_TalonSRX(12),
-            'back right':  ctre.WPI_TalonSRX(13),
-            'back left':   ctre.WPI_TalonSRX(14),
+            'front left':  ctre.WPI_TalonSRX(24),
+            'front right': ctre.WPI_TalonSRX(14),
+            'back right':  ctre.WPI_TalonSRX(12),
+            'back left':   ctre.WPI_TalonSRX(22),
             }
         self.turning_motors = {
-            'front left':  ctre.WPI_TalonSRX(21),
-            'front right': ctre.WPI_TalonSRX(22),
-            'back right':  ctre.WPI_TalonSRX(23),
-            'back left':   ctre.WPI_TalonSRX(24),
+            'front left':  ctre.WPI_TalonSRX(23),
+            'front right': ctre.WPI_TalonSRX(13),
+            'back right':  ctre.WPI_TalonSRX(11),
+            'back left':   ctre.WPI_TalonSRX(21),
             }
         self.encoders = {
-            'front left':  wpilib.Encoder(0, 1),
-            'front right': wpilib.Encoder(2, 3),
-            'back right':  wpilib.Encoder(4, 5),
-            'back left':   wpilib.Encoder(6, 7)
+            'front left':  wpilib.Encoder(6, 7),
+            'front right': wpilib.Encoder(4, 5),
+            'back right':  wpilib.Encoder(0, 1),
+            'back left':   wpilib.Encoder(2, 3)
             }
 
         # 0 is the left hand, 1 is the right hand
