@@ -204,6 +204,7 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
 
 
 class OurRobot(wpilib.TimedRobot):
+    diag = True
     def __init__(self):
         super().__init__()
 
@@ -258,6 +259,14 @@ class OurRobot(wpilib.TimedRobot):
     def teleopInit(self):
         pass
     def teleopPeriodic(self):
+        if self.diag:
+            for drive_motor in self.drive_motors.values():
+                drive_motor.set(0.1)
+            for turning_motor in self.turning_motors.values():
+                turning_motor.set(0.1)
+            for i, encoder in enumerate(self.encoders.values()):
+                wpilib.SmartDashboard.putString(f'encoder_{i}', str(encoder.get()))
+
         forward = -self.controller.getY(0)
         left = -self.controller.getX(0)
         rotate_cc = -self.controler.getX(1)
@@ -273,3 +282,7 @@ class OurRobot(wpilib.TimedRobot):
         pass
     def disabledPeriodic(self):
         pass
+
+
+if __name__ == '__main__':
+    wpilib.run(OurRobot)
