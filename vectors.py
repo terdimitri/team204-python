@@ -83,6 +83,7 @@ class Projective2d:
     def __imul__(self, scalar):
         self._r *= scalar
         self._reproc()
+        return self
 
     def __add__(self, other):
         out = Projective2d(0, 0)
@@ -91,6 +92,7 @@ class Projective2d:
     def __iadd__(self, other):
         self.x += other.x
         self.y += other.y
+        return self
 
     def __sub__(self, other):
         out = Projective2d(0, 0)
@@ -99,6 +101,7 @@ class Projective2d:
     def __isub(self, other):
         self.x -= other.x
         self.y -= other.y
+        return self
 
     def __repr__(self):
         return f'Projective2d({self._r}, {self._theta})'
