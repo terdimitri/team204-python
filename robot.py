@@ -36,6 +36,8 @@ class SwerveModule:
         self.turning_motor = turning_motor
         self.encoder = encoder
 
+        self.turn_controller = wpilib.PIDController()
+
     def set_turn(self, speed):
         """Sets the turning motor.
         """
@@ -58,15 +60,26 @@ class SwerveModule:
         """
         if self.inverted['encoder']:
             return -self.encoder.encoder.get() / self.full_turn * tau
-        return self.encoder.encoder.get() / self.full_turn * tau
+        return self.encoder.get() / self.full_turn * tau
+
+    def angle_to_encoder(self, angle):
+        """Converts the given angle to a possible encoder value"""
+        return round(angle/tau*self.full_turn)
 
     def angle_error(self, vector):
-        """Returns distance between current angle and argument of the vector.
-        """
+        """Returns distance between current angle and argument of the vector."""
         current_angle = self.current_angle()
         return abs(closest_to_mod(vector.argument, current_angle, pi) - current_angle)
 
-    def set(self, vector, speed=1, p_coeff=0.5):
+    def pidWrite(self, value):
+        """Set turn speed to value. Used for pid"""
+        self.set_turn(value)
+
+    def pidGet(self):
+        """Gives the wheel direction. used for pid"""
+        return self.encoder.get() % (self.full_turn//2)
+
+    def set(self, vector, speed=1):
         """Sets the speed of the driving motor to the magnitude of the vector
         scaled by `speed`, and sets the turning motor to turn towards the
         desired angle.
@@ -76,9 +89,11 @@ class SwerveModule:
         # proportional control for turning to specified angle
         current_angle = self.current_angle()
         target_angle = closest_to_mod(vector.argument, current_angle, pi)
-        angle_delta = target_angle - current_angle
-        turning_speed = -copysign(min(1, abs(p_coeff*angle_delta)), angle_delta)
-        self.set_turn(turning_speed)
+        #angle_delta = target_angle - current_angle
+        #encoder_delta = self.angle_to_encoder(angle_delta)
+        #turning_speed = -copysign(min(1, abs(p_coeff*encoder_delta)), encoder_delta)
+        #self.set_turn(turning_speed)
+
         # if target_angle is the argument backwards, reverse the speed
         reverse = 1
         if abs((vector.argument - target_angle) % tau - pi) < pi/2:
@@ -210,7 +225,6 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
 
 
 class OurRobot(wpilib.TimedRobot):
-    diag = True
     def __init__(self):
         super().__init__()
 
