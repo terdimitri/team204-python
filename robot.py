@@ -1,6 +1,7 @@
 from math import tau, copysign, pi, cos, inf, sqrt
 import wpilib
 import wpilib.drive
+from wpilib.interfaces import GenericHID
 import ctre
 
 from vectors import Projective2d
@@ -17,6 +18,7 @@ def closest_to_mod(a, c, n):
 
 class SwerveModule:
     full_turn = 415
+
     def __init__(self, drive_motor, turning_motor, encoder, inverted=None):
         """At the start of program, it is expected that the drive motor will
         spin forwards, the turning motor will spin counter-clockwise, and the
@@ -105,9 +107,9 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
         self.trackwidth = trackwidth
 
     def set(self, forward, strafe_left, rotate):
-        forward = self.applyDeadband(forward)
-        strafe_left = self.applyDeadband(strafe_left)
-        rotate = self.applyDeadband(rotate)
+        forward = self._applyDeadband(forward, self._m_deadband)
+        strafe_left = self._applyDeadband(strafe_left, self._m_deadband)
+        rotate = self._applyDeadband(rotate, self._m_deadband)
 
         center = Projective2d(forward, strafe_left)
         # translation_intensity is the ratio of the magnitude of the joystick
@@ -125,7 +127,10 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
 
         # max_possible_rotate is the maximum rotate input that would be able to
         # result in the same center
-        max_possible_rotate = 1 / center.magnitude
+        try:
+            max_possible_rotate = 1 / center.magnitude
+        except ZeroDivisionError:
+            max_possible_rotate = inf
         max_possible_rotate = min(1, max_possible_rotate)
 
         try:
@@ -260,18 +265,12 @@ class OurRobot(wpilib.TimedRobot):
     def teleopInit(self):
         pass
     def teleopPeriodic(self):
-        if self.diag:
-            if self.controller.getAButton():
-                for drive_motor in self.drive_motors.values():
-                    drive_motor.set(0.1)
-                for turning_motor in self.turning_motors.values():
-                    turning_motor.set(0.1)
-            for i, encoder in enumerate(self.encoders.values()):
-                wpilib.SmartDashboard.putString(f'encoder_{i}', str(encoder.get()))
+        forward = -self.controller.getY(GenericHID.Hand.kLeftHand)
+        left = -self.controller.getX(GenericHID.Hand.kLeftHand)
+        rotate_cc = -self.controller.getX(GenericHID.Hand.kRightHand)
 
-        forward = -self.controller.getY(0)
-        left = -self.controller.getX(0)
-        rotate_cc = -self.controler.getX(1)
+        for k in self.encoders:
+            wpilib.SmartDashboard.putString(k, str(self.encoders[k].get()))
 
         self.drive.set(forward, left, rotate_cc)
 
