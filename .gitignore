@@ -1,1 +1,7 @@
 __pycache__
+.deploy_cfg
+.installer_config
+imgui.ini
+opkg_cache/
+other.py
+pip_cache/
