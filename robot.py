@@ -1,10 +1,13 @@
-from math import tau, copysign, pi, cos, inf, sqrt
+"""This is a module docstring"""
+
+from math import tau, pi, cos, inf, sqrt
 import wpilib
 import wpilib.drive
 from wpilib.interfaces import GenericHID
 import ctre
 
 from vectors import Projective2d
+import simple_pid
 
 
 def closest_to_mod(a, c, n):
@@ -36,7 +39,13 @@ class SwerveModule:
         self.turning_motor = turning_motor
         self.encoder = encoder
 
-        self.turn_controller = wpilib.PIDController()
+        # PID controller
+        self.turner = simple_pid.PID(Kp=1.0, Ki=0.0, Kd=0.0,        # p, i, and d coefficients
+                                     sample_time=None,              # update values every loop
+                                     output_limits=(-1.0, 1.0),
+                                     input_limits=(0, pi),
+                                     wrap_around=True,              # input is circular
+                                     auto_mode=True)                # enable the pid
 
     def set_turn(self, speed):
         """Sets the turning motor.
@@ -71,14 +80,6 @@ class SwerveModule:
         current_angle = self.current_angle()
         return abs(closest_to_mod(vector.argument, current_angle, pi) - current_angle)
 
-    def pidWrite(self, value):
-        """Set turn speed to value. Used for pid"""
-        self.set_turn(value)
-
-    def pidGet(self):
-        """Gives the wheel direction. used for pid"""
-        return self.encoder.get() % (self.full_turn//2)
-
     def set(self, vector, speed=1):
         """Sets the speed of the driving motor to the magnitude of the vector
         scaled by `speed`, and sets the turning motor to turn towards the
@@ -86,18 +87,14 @@ class SwerveModule:
         """
         if vector is None:
             self.stopMotor()
-        # proportional control for turning to specified angle
-        current_angle = self.current_angle()
-        target_angle = closest_to_mod(vector.argument, current_angle, pi)
-        #angle_delta = target_angle - current_angle
-        #encoder_delta = self.angle_to_encoder(angle_delta)
-        #turning_speed = -copysign(min(1, abs(p_coeff*encoder_delta)), encoder_delta)
-        #self.set_turn(turning_speed)
 
-        # if target_angle is the argument backwards, reverse the speed
+        self.set_turn(self.turner(self.current_angle()))
+
+        # If the wheel is backwards, spin it in reverse
         reverse = 1
-        if abs((vector.argument - target_angle) % tau - pi) < pi/2:
+        if self.angle_error(vector) > pi/2:     # angle error is very big, wheel is backwards
             reverse = -1
+
         # set speed of drive motor
         speed = speed * min(1, vector.magnitude)
         self.set_drive(reverse*speed)
@@ -120,6 +117,11 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
         self.back_left = back_left
         self.wheelbase = wheelbase
         self.trackwidth = trackwidth
+
+        self.front_left_vec = Projective2d(0, 0)
+        self.front_right_vec = Projective2d(0, 0)
+        self.back_right_vec = Projective2d(0, 0)
+        self.back_left_vec = Projective2d(0, 0)
 
     def set(self, forward, strafe_left, rotate):
         forward = self._applyDeadband(forward, self._m_deadband)
@@ -164,46 +166,46 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
         W = self.trackwidth / R
         L = self.wheelbase / R
 
-        front_left_vec = Projective2d(L, W) - c
-        front_right_vec = Projective2d(L, -W) - c
-        back_right_vec = Projective2d(-L, -W) - c
-        back_left_vec = Projective2d(-L, W) - c
+        self.front_left_vec = Projective2d(L, W) - c
+        self.front_right_vec = Projective2d(L, -W) - c
+        self.back_right_vec = Projective2d(-L, -W) - c
+        self.back_left_vec = Projective2d(-L, W) - c
 
-        front_left_vec.argument += pi/2
-        front_right_vec.argument += pi/2
-        back_right_vec.argument += pi/2
-        back_left_vec.argument += pi/2
+        self.front_left_vec.argument += pi/2
+        self.front_right_vec.argument += pi/2
+        self.back_right_vec.argument += pi/2
+        self.back_left_vec.argument += pi/2
 
-        max_magnitude = max(front_left_vec.magnitude,
-                            front_right_vec.magnitude,
-                            back_right_vec.magnitude,
-                            back_left_vec.magnitude)
+        max_magnitude = max(self.front_left_vec.magnitude,
+                            self.front_right_vec.magnitude,
+                            self.back_right_vec.magnitude,
+                            self.back_left_vec.magnitude)
         try:
-            front_left_vec *= (1/max_magnitude)
-            front_right_vec *= (1/max_magnitude)
-            back_right_vec *= (1/max_magnitude)
-            back_left_vec *= (1/max_magnitude)
+            self.front_left_vec *= (1/max_magnitude)
+            self.front_right_vec *= (1/max_magnitude)
+            self.back_right_vec *= (1/max_magnitude)
+            self.back_left_vec *= (1/max_magnitude)
         except ZeroDivisionError:
-            front_left_vec.magnitude = 1
-            front_right_vec.magnitude = 1
-            back_right_vec.magnitude = 1
-            back_left_vec.magnitude = 1
+            self.front_left_vec.magnitude = 1
+            self.front_right_vec.magnitude = 1
+            self.back_right_vec.magnitude = 1
+            self.back_left_vec.magnitude = 1
 
-        max_angle_error = max(self.front_left.angle_error(front_left_vec),
-                              self.front_right.angle_error(front_right_vec),
-                              self.back_right.angle_error(back_right_vec),
-                              self.back_left.angle_error(back_left_vec))
+        max_angle_error = max(self.front_left.angle_error(self.front_left_vec),
+                              self.front_right.angle_error(self.front_right_vec),
+                              self.back_right.angle_error(self.back_right_vec),
+                              self.back_left.angle_error(self.back_left_vec))
 
         if max_angle_error <= self.angle_tolerance:
-            self.front_left.set(front_left_vec, 0)
-            self.front_right.set(front_right_vec, 0)
-            self.back_right.set(back_right_vec, 0)
-            self.back_left.set(back_left_vec, 0)
+            self.front_left.set(self.front_left_vec, 0)
+            self.front_right.set(self.front_right_vec, 0)
+            self.back_right.set(self.back_right_vec, 0)
+            self.back_left.set(self.back_left_vec, 0)
         else:
-            self.front_left.set(front_left_vec, speed)
-            self.front_right.set(front_right_vec, speed)
-            self.back_right.set(back_right_vec, speed)
-            self.back_left.set(back_left_vec, speed)
+            self.front_left.set(self.front_left_vec, speed)
+            self.front_right.set(self.front_right_vec, speed)
+            self.back_right.set(self.back_right_vec, speed)
+            self.back_left.set(self.back_left_vec, speed)
 
         # Tell the watchdog that the motors have been set.
         self.feed()
@@ -221,7 +223,6 @@ class SwerveDrive(wpilib.drive.RobotDriveBase):
 
     def getDescription(self) -> str:
         return "SwerveDrive"
-
 
 
 class OurRobot(wpilib.TimedRobot):
@@ -284,7 +285,7 @@ class OurRobot(wpilib.TimedRobot):
         rotate_cc = -self.controller.getX(GenericHID.Hand.kRightHand)
 
         for k in self.encoders:
-            wpilib.SmartDashboard.putString(k, str(self.encoders[k].get()))
+            wpilib.SmartDashboard.putString(k + ' encoder', str(self.encoders[k].get()))
 
         self.drive.set(forward, left, rotate_cc)
 

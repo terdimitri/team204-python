@@ -1,3 +1,4 @@
+"""Simple PID implementation"""
 import time
 import warnings
 
@@ -15,25 +16,26 @@ def _clamp(value, limits):
 
 try:
     # get monotonic time to ensure that time deltas are always positive
-    _current_time = time.monotonic
+    CURRENT_TIME = time.monotonic
 except AttributeError:
     # time.monotonic() not available (using python < 3.3), fallback to time.time()
-    _current_time = time.time
+    CURRENT_TIME = time.time
     warnings.warn('time.monotonic() not available in python < 3.3, using time.time() as fallback')
 
 
 class PID:
     """
-    A simple PID controller. No fuss.
+    A simple PID controller.
     """
-
     def __init__(self,
                  Kp=1.0, Ki=0.0, Kd=0.0,
                  setpoint=0,
                  sample_time=0.01,
                  output_limits=(None, None),
+                 input_limits=(None, None),
                  auto_mode=True,
-                 proportional_on_measurement=False):
+                 proportional_on_measurement=False,
+                 wrap_around=False):
         """
         :param Kp: The value for the proportional gain Kp
         :param Ki: The value for the integral gain Ki
@@ -59,26 +61,26 @@ class PID:
         self.sample_time = sample_time
 
         self._min_output, self._max_output = output_limits
+        self.input_limits = input_limits
         self._auto_mode = auto_mode
         self.proportional_on_measurement = proportional_on_measurement
+        self.wrap_around = wrap_around
 
         self.reset()
 
     def __call__(self, input_, dt=None):
         """
-
         Call the PID controller with *input_* and calculate and return a control output if
         sample_time seconds has passed since the last update. If no new output is calculated, return
         the previous output instead (or None if no value has been calculated yet).
 
         :param dt: If set, uses this value for timestep instead of real time. This can be used in
         simulations when simulation time is different from real time.
-
         """
         if not self.auto_mode:
             return self._last_output
 
-        now = _current_time()
+        now = CURRENT_TIME()
         if dt is None:
             dt = now - self._last_time if now - self._last_time else 1e-16
         elif dt <= 0:
@@ -90,6 +92,15 @@ class PID:
 
         # compute error terms
         error = self.setpoint - input_
+
+        # check the opposite direction from the setpoint
+        if self.wrap_around:
+            if input_ < self.setpoint:
+                shadow_point = self.setpoint - self.input_width
+            else:
+                shadow_point = self.setpoint + self.input_width
+            error = min(error, shadow_point - input_, key=abs)
+
         d_input = input_ - (self._last_input if self._last_input is not None else input_)
 
         # compute the proportional term
@@ -116,6 +127,12 @@ class PID:
         self._last_time = now
 
         return output
+
+    @property
+    def input_width(self):
+        """Returns the width of the possible input space."""
+        lower, higher = self.input_limits
+        return higher - lower
 
     @property
     def components(self):
@@ -200,6 +217,6 @@ class PID:
         self._integral = 0
         self._derivative = 0
 
-        self._last_time = _current_time()
+        self._last_time = CURRENT_TIME()
         self._last_output = None
         self._last_input = None
